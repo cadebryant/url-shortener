@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../client/build')));
 
 // SQLite database setup
 interface UrlEntry {
@@ -152,9 +151,227 @@ app.get('/:shortCode', (req, res) => {
   });
 });
 
-// Serve React app for all other routes
+// Serve a simple HTML page for the root route
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>URL Shortener</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 2rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          color: white;
+        }
+        .container {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+          color: #333;
+        }
+        h1 {
+          text-align: center;
+          margin-bottom: 2rem;
+          color: #333;
+        }
+        .form-group {
+          margin-bottom: 1rem;
+        }
+        input[type="url"] {
+          width: 100%;
+          padding: 1rem;
+          border: 2px solid #e1e5e9;
+          border-radius: 8px;
+          font-size: 1rem;
+          box-sizing: border-box;
+        }
+        input[type="url"]:focus {
+          outline: none;
+          border-color: #667eea;
+        }
+        button {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          width: 100%;
+          margin-top: 1rem;
+        }
+        button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .result {
+          margin-top: 2rem;
+          padding: 1rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          display: none;
+        }
+        .error {
+          color: #c33;
+          background: #fee;
+          border-left: 4px solid #c33;
+        }
+        .success {
+          color: #28a745;
+          background: #d4edda;
+          border-left: 4px solid #28a745;
+        }
+        .short-url {
+          font-family: 'Courier New', monospace;
+          font-weight: 600;
+          color: #667eea;
+          word-break: break-all;
+        }
+        .features {
+          margin-top: 2rem;
+          padding: 1.5rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+        }
+        .features h3 {
+          margin-bottom: 1rem;
+          color: #333;
+        }
+        .features ul {
+          list-style: none;
+          padding: 0;
+        }
+        .features li {
+          padding: 0.5rem 0;
+          color: #666;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>🔗 URL Shortener</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 2rem;">Transform long URLs into short, shareable links</p>
+        
+        <form id="urlForm">
+          <div class="form-group">
+            <input type="url" id="urlInput" placeholder="Enter your long URL here..." required>
+          </div>
+          <button type="submit">Shorten URL</button>
+        </form>
+        
+        <div id="result" class="result"></div>
+        
+        <div class="features">
+          <h3>Features</h3>
+          <ul>
+            <li>✨ Free and fast URL shortening</li>
+            <li>📊 Click tracking and analytics</li>
+            <li>🔒 Secure and reliable</li>
+            <li>📱 Mobile-friendly interface</li>
+          </ul>
+        </div>
+      </div>
+
+      <script>
+        document.getElementById('urlForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const url = document.getElementById('urlInput').value;
+          const resultDiv = document.getElementById('result');
+          
+          try {
+            const response = await fetch('/api/shorten', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ url }),
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Failed to shorten URL');
+            }
+            
+            resultDiv.innerHTML = \`
+              <div class="success">
+                <h3>Your shortened URL:</h3>
+                <div class="short-url">\${data.shortUrl}</div>
+                <p><strong>Original URL:</strong> \${data.originalUrl}</p>
+                <p><strong>Clicks:</strong> \${data.clickCount}</p>
+                <button onclick="navigator.clipboard.writeText('\${data.shortUrl}')" style="margin-top: 1rem; background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">📋 Copy</button>
+              </div>
+            \`;
+            resultDiv.style.display = 'block';
+          } catch (error) {
+            resultDiv.innerHTML = \`
+              <div class="error">
+                <strong>Error:</strong> \${error.message}
+              </div>
+            \`;
+            resultDiv.style.display = 'block';
+          }
+        });
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Handle other routes that might be looking for the React app
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/build/index.html'));
+  res.status(404).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>404 - URL Shortener</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 2rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          color: white;
+          text-align: center;
+        }
+        .container {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+          color: #333;
+        }
+        h1 { color: #333; }
+        a {
+          color: #667eea;
+          text-decoration: none;
+          font-weight: 600;
+        }
+        a:hover { text-decoration: underline; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>404 - Page Not Found</h1>
+        <p>The page you're looking for doesn't exist.</p>
+        <p><a href="/">← Back to URL Shortener</a></p>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 app.listen(PORT, () => {
