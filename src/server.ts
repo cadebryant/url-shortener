@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import { nanoid } from 'nanoid';
+import sqlite3 from 'sqlite3';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,16 +14,33 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// In-memory storage (in production, use a database)
+// SQLite database setup
 interface UrlEntry {
-  id: string;
-  originalUrl: string;
-  shortCode: string;
-  createdAt: Date;
-  clickCount: number;
+  id: number;
+  short_code: string;
+  original_url: string;
+  created_at: string;
+  click_count: number;
 }
 
-const urlDatabase: Map<string, UrlEntry> = new Map();
+// Initialize SQLite database
+const db = new sqlite3.Database('urls.db');
+
+// Create table if it doesn't exist
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS urls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      short_code TEXT UNIQUE NOT NULL,
+      original_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      click_count INTEGER DEFAULT 0
+    )
+  `);
+  
+  // Create index for fast lookups
+  db.run('CREATE INDEX IF NOT EXISTS idx_short_code ON urls(short_code)');
+});
 
 // Helper function to validate URL
 function isValidUrl(url: string): boolean {
@@ -52,69 +70,86 @@ app.post('/api/shorten', (req, res) => {
   }
 
   // Check if URL already exists
-  const existingEntry = Array.from(urlDatabase.values()).find(
-    entry => entry.originalUrl === url
-  );
+  db.get('SELECT * FROM urls WHERE original_url = ?', [url], (err, row: UrlEntry) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
 
-  if (existingEntry) {
-    return res.json({
-      shortUrl: `${req.protocol}://${req.get('host')}/${existingEntry.shortCode}`,
-      originalUrl: existingEntry.originalUrl,
-      shortCode: existingEntry.shortCode,
-      clickCount: existingEntry.clickCount
+    if (row) {
+      return res.json({
+        shortUrl: `${req.protocol}://${req.get('host')}/${row.short_code}`,
+        originalUrl: row.original_url,
+        shortCode: row.short_code,
+        clickCount: row.click_count
+      });
+    }
+
+    // Create new short URL
+    const shortCode = generateShortCode();
+    
+    // Insert into database
+    db.run('INSERT INTO urls (short_code, original_url) VALUES (?, ?)', [shortCode, url], function(err) {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      
+      res.json({
+        shortUrl: `${req.protocol}://${req.get('host')}/${shortCode}`,
+        originalUrl: url,
+        shortCode: shortCode,
+        clickCount: 0
+      });
     });
-  }
-
-  // Create new short URL
-  const shortCode = generateShortCode();
-  const urlEntry: UrlEntry = {
-    id: nanoid(),
-    originalUrl: url,
-    shortCode,
-    createdAt: new Date(),
-    clickCount: 0
-  };
-
-  urlDatabase.set(shortCode, urlEntry);
-
-  res.json({
-    shortUrl: `${req.protocol}://${req.get('host')}/${shortCode}`,
-    originalUrl: urlEntry.originalUrl,
-    shortCode: urlEntry.shortCode,
-    clickCount: urlEntry.clickCount
   });
 });
 
 app.get('/api/stats/:shortCode', (req, res) => {
   const { shortCode } = req.params;
-  const entry = urlDatabase.get(shortCode);
 
-  if (!entry) {
-    return res.status(404).json({ error: 'Short URL not found' });
-  }
+  db.get('SELECT short_code, original_url, click_count, created_at FROM urls WHERE short_code = ?', [shortCode], (err, row: UrlEntry) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
 
-  res.json({
-    originalUrl: entry.originalUrl,
-    shortCode: entry.shortCode,
-    clickCount: entry.clickCount,
-    createdAt: entry.createdAt
+    if (!row) {
+      return res.status(404).json({ error: 'Short URL not found' });
+    }
+
+    res.json({
+      originalUrl: row.original_url,
+      shortCode: row.short_code,
+      clickCount: row.click_count,
+      createdAt: row.created_at
+    });
   });
 });
 
 app.get('/:shortCode', (req, res) => {
   const { shortCode } = req.params;
-  const entry = urlDatabase.get(shortCode);
 
-  if (!entry) {
-    return res.status(404).send('Short URL not found');
-  }
+  db.get('SELECT * FROM urls WHERE short_code = ?', [shortCode], (err, row: UrlEntry) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).send('Internal server error');
+    }
 
-  // Increment click count
-  entry.clickCount++;
-  urlDatabase.set(shortCode, entry);
+    if (!row) {
+      return res.status(404).send('Short URL not found');
+    }
 
-  // Redirect to original URL
-  res.redirect(entry.originalUrl);
+    // Increment click count
+    db.run('UPDATE urls SET click_count = click_count + 1 WHERE short_code = ?', [shortCode], (err) => {
+      if (err) {
+        console.error('Database error:', err);
+      }
+    });
+
+    // Redirect to original URL
+    res.redirect(row.original_url);
+  });
 });
 
 // Serve React app for all other routes
