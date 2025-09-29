@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import sqlite3 from 'sqlite3';
+import rateLimit from 'express-rate-limit';
+import slowDown from 'express-slow-down';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +23,31 @@ app.use(helmet({
 }));
 app.use(cors());
 app.use(express.json());
+
+// Security middleware
+// Rate limiting - 100 requests per 15 minutes per IP
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Slow down after 50 requests in 15 minutes
+const speedLimiter = slowDown({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  delayAfter: 50, // allow 50 requests per 15 minutes, then...
+  delayMs: 500, // begin adding 500ms of delay per request above 50
+  maxDelayMs: 20000, // max delay of 20 seconds
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+app.use(speedLimiter);
 
 // SQLite database setup
 interface UrlEntry {
@@ -53,11 +80,50 @@ db.serialize(() => {
 // Helper function to validate URL
 function isValidUrl(url: string): boolean {
   try {
-    new URL(url);
-    return true;
+    const urlObj = new URL(url);
+    // Only allow HTTP and HTTPS protocols
+    return ['http:', 'https:'].includes(urlObj.protocol);
   } catch {
     return false;
   }
+}
+
+// Helper function to check for suspicious URLs
+function isSuspiciousUrl(url: string): boolean {
+  const suspiciousPatterns = [
+    /localhost/i,
+    /127\.0\.0\.1/i,
+    /0\.0\.0\.0/i,
+    /::1/i,
+    /file:/i,
+    /ftp:/i,
+    /javascript:/i,
+    /data:/i,
+    /vbscript:/i
+  ];
+  
+  return suspiciousPatterns.some(pattern => pattern.test(url));
+}
+
+// Helper function to validate URL length
+function isValidUrlLength(url: string): boolean {
+  return url.length >= 10 && url.length <= 2048; // Reasonable URL length limits
+}
+
+// Helper function to check for spam patterns
+function containsSpamPatterns(url: string): boolean {
+  const spamPatterns = [
+    /bit\.ly/i,
+    /tinyurl/i,
+    /short\.link/i,
+    /goo\.gl/i,
+    /t\.co/i,
+    /fb\.me/i,
+    /ow\.ly/i,
+    /is\.gd/i
+  ];
+  
+  return spamPatterns.some(pattern => pattern.test(url));
 }
 
 // Helper function to generate short code
@@ -83,16 +149,44 @@ function getBaseUrl(req: any): string {
 app.post('/api/shorten', (req, res) => {
   const { url } = req.body;
 
+  // Input validation
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  if (!isValidUrl(url)) {
-    return res.status(400).json({ error: 'Invalid URL format' });
+  if (typeof url !== 'string') {
+    return res.status(400).json({ error: 'URL must be a string' });
+  }
+
+  // Trim whitespace
+  const cleanUrl = url.trim();
+
+  if (!cleanUrl) {
+    return res.status(400).json({ error: 'URL cannot be empty' });
+  }
+
+  // Validate URL format
+  if (!isValidUrl(cleanUrl)) {
+    return res.status(400).json({ error: 'Invalid URL format. Only HTTP and HTTPS URLs are allowed.' });
+  }
+
+  // Check URL length
+  if (!isValidUrlLength(cleanUrl)) {
+    return res.status(400).json({ error: 'URL length must be between 10 and 2048 characters.' });
+  }
+
+  // Check for suspicious URLs
+  if (isSuspiciousUrl(cleanUrl)) {
+    return res.status(400).json({ error: 'Suspicious URL detected. Local and file URLs are not allowed.' });
+  }
+
+  // Check for spam patterns (optional - you can remove this if you want to allow shortening of already shortened URLs)
+  if (containsSpamPatterns(cleanUrl)) {
+    return res.status(400).json({ error: 'URL appears to be already shortened. Please provide the original URL.' });
   }
 
   // Check if URL already exists
-  db.get('SELECT * FROM urls WHERE original_url = ?', [url], (err, row: UrlEntry) => {
+  db.get('SELECT * FROM urls WHERE original_url = ?', [cleanUrl], (err, row: UrlEntry) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ error: 'Internal server error' });
@@ -111,7 +205,7 @@ app.post('/api/shorten', (req, res) => {
     const shortCode = generateShortCode();
     
     // Insert into database
-    db.run('INSERT INTO urls (short_code, original_url) VALUES (?, ?)', [shortCode, url], function(err) {
+    db.run('INSERT INTO urls (short_code, original_url) VALUES (?, ?)', [shortCode, cleanUrl], function(err) {
       if (err) {
         console.error('Database error:', err);
         return res.status(500).json({ error: 'Internal server error' });
@@ -119,7 +213,7 @@ app.post('/api/shorten', (req, res) => {
       
       res.json({
         shortUrl: `${getBaseUrl(req)}/${shortCode}`,
-        originalUrl: url,
+        originalUrl: cleanUrl,
         shortCode: shortCode,
         clickCount: 0
       });
@@ -277,6 +371,31 @@ app.get('/', (req, res) => {
           padding: 0.5rem 0;
           color: #666;
         }
+        .captcha-container {
+          background: #f8f9fa;
+          border: 2px solid #e1e5e9;
+          border-radius: 8px;
+          padding: 1rem;
+          margin: 1rem 0;
+        }
+        .captcha-challenge {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+        .captcha-challenge span {
+          font-weight: 600;
+          color: #333;
+          min-width: 120px;
+        }
+        .captcha-challenge input {
+          flex: 1;
+          min-width: 100px;
+          padding: 0.5rem;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+        }
       </style>
     </head>
     <body>
@@ -287,6 +406,14 @@ app.get('/', (req, res) => {
         <form id="urlForm">
           <div class="form-group">
             <input type="url" id="urlInput" placeholder="Enter your long URL here..." required>
+          </div>
+          <div class="form-group">
+            <div class="captcha-container">
+              <div class="captcha-challenge">
+                <span id="captchaQuestion">What is 3 + 4?</span>
+                <input type="text" id="captchaAnswer" placeholder="Your answer" required>
+              </div>
+            </div>
           </div>
           <button type="submit">Shorten URL</button>
         </form>
@@ -310,10 +437,48 @@ app.get('/', (req, res) => {
       </div>
 
       <script>
+        // Simple CAPTCHA system
+        let captchaAnswer = 0;
+        
+        function generateCaptcha() {
+          const num1 = Math.floor(Math.random() * 10) + 1;
+          const num2 = Math.floor(Math.random() * 10) + 1;
+          const operation = Math.random() > 0.5 ? '+' : '-';
+          
+          let question, answer;
+          if (operation === '+') {
+            question = \`What is \${num1} + \${num2}?\`;
+            answer = num1 + num2;
+          } else {
+            question = \`What is \${num1} - \${num2}?\`;
+            answer = num1 - num2;
+          }
+          
+          document.getElementById('captchaQuestion').textContent = question;
+          captchaAnswer = answer;
+        }
+        
+        // Generate initial CAPTCHA
+        generateCaptcha();
+        
         document.getElementById('urlForm').addEventListener('submit', async (e) => {
           e.preventDefault();
           const url = document.getElementById('urlInput').value;
+          const captchaInput = document.getElementById('captchaAnswer').value;
           const resultDiv = document.getElementById('result');
+          
+          // Validate CAPTCHA
+          if (parseInt(captchaInput) !== captchaAnswer) {
+            resultDiv.innerHTML = \`
+              <div class="error">
+                <strong>CAPTCHA Error:</strong> Incorrect answer. Please try again.
+              </div>
+            \`;
+            resultDiv.style.display = 'block';
+            generateCaptcha(); // Generate new CAPTCHA
+            document.getElementById('captchaAnswer').value = '';
+            return;
+          }
           
           try {
             const response = await fetch('/api/shorten', {
@@ -340,6 +505,10 @@ app.get('/', (req, res) => {
               </div>
             \`;
             resultDiv.style.display = 'block';
+            
+            // Generate new CAPTCHA for next use
+            generateCaptcha();
+            document.getElementById('captchaAnswer').value = '';
           } catch (error) {
             resultDiv.innerHTML = \`
               <div class="error">
