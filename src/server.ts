@@ -65,6 +65,20 @@ function generateShortCode(): string {
   return uuidv4().replace(/-/g, '').substring(0, 8);
 }
 
+// Helper function to get the correct protocol and host
+function getBaseUrl(req: any): string {
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const host = req.get('host');
+  
+  // Use a shorter domain if available (you can set this in Railway environment variables)
+  const shortDomain = process.env.SHORT_DOMAIN;
+  if (shortDomain) {
+    return `${protocol}://${shortDomain}`;
+  }
+  
+  return `${protocol}://${host}`;
+}
+
 // Routes
 app.post('/api/shorten', (req, res) => {
   const { url } = req.body;
@@ -86,7 +100,7 @@ app.post('/api/shorten', (req, res) => {
 
     if (row) {
       return res.json({
-        shortUrl: `${req.protocol}://${req.get('host')}/${row.short_code}`,
+        shortUrl: `${getBaseUrl(req)}/${row.short_code}`,
         originalUrl: row.original_url,
         shortCode: row.short_code,
         clickCount: row.click_count
@@ -104,7 +118,7 @@ app.post('/api/shorten', (req, res) => {
       }
       
       res.json({
-        shortUrl: `${req.protocol}://${req.get('host')}/${shortCode}`,
+        shortUrl: `${getBaseUrl(req)}/${shortCode}`,
         originalUrl: url,
         shortCode: shortCode,
         clickCount: 0
@@ -286,7 +300,12 @@ app.get('/', (req, res) => {
             <li>📊 Click tracking and analytics</li>
             <li>🔒 Secure and reliable</li>
             <li>📱 Mobile-friendly interface</li>
+            <li>🔗 HTTPS secure links</li>
           </ul>
+          <p style="margin-top: 1rem; font-size: 0.9rem; color: #666;">
+            <strong>Note:</strong> For shorter URLs, consider using a custom domain. 
+            Set the <code>SHORT_DOMAIN</code> environment variable in Railway.
+          </p>
         </div>
       </div>
 
