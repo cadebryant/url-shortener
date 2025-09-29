@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
-import { nanoid } from 'nanoid';
+import { v4 as uuidv4 } from 'uuid';
 import sqlite3 from 'sqlite3';
 
 const app = express();
@@ -54,7 +54,7 @@ function isValidUrl(url: string): boolean {
 
 // Helper function to generate short code
 function generateShortCode(): string {
-  return nanoid(8);
+  return uuidv4().replace(/-/g, '').substring(0, 8);
 }
 
 // Routes

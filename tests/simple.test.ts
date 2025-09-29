@@ -39,11 +39,11 @@ describe('URL Shortener - Basic Tests', () => {
   });
 
   describe('Short Code Generation', () => {
-    // Mock nanoid for testing
-    const mockNanoid = (length: number = 8): string => {
+    // Mock UUID for testing
+    const mockUuid = (): string => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
       let result = '';
-      for (let i = 0; i < length; i++) {
+      for (let i = 0; i < 8; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
       }
       return result;
@@ -54,7 +54,7 @@ describe('URL Shortener - Basic Tests', () => {
       const iterations = 100;
 
       for (let i = 0; i < iterations; i++) {
-        const code = mockNanoid(8);
+        const code = mockUuid();
         expect(code).toHaveLength(8);
         expect(codes.has(code)).toBe(false);
         codes.add(code);
@@ -62,12 +62,8 @@ describe('URL Shortener - Basic Tests', () => {
     });
 
     it('should generate codes with correct length', () => {
-      const lengths = [4, 6, 8, 10];
-      
-      lengths.forEach(length => {
-        const code = mockNanoid(length);
-        expect(code).toHaveLength(length);
-      });
+      const code = mockUuid();
+      expect(code).toHaveLength(8);
     });
   });
 
