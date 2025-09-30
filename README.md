@@ -1,10 +1,11 @@
 # 🔗 URL Shortener
 
-A modern, fast, and simple URL shortener built with TypeScript, React, and Express.js. Perfect for personal use or as a portfolio project.
+A modern, fast, and secure URL shortener built with TypeScript, Express.js, and SQLite. Features comprehensive security measures, rate limiting, and a beautiful web interface.
 
-![URL Shortener](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
-![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-https://cb--url--shortener.up.railway.app-green?style=for-the-badge)](https://cb-url-shortener.up.railway.app)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
 ![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
 ![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)
 
 ## ✨ Features
@@ -12,10 +13,22 @@ A modern, fast, and simple URL shortener built with TypeScript, React, and Expre
 - 🚀 **Fast URL shortening** - Generate short links instantly
 - 📊 **Click tracking** - Monitor how many times your links are clicked
 - 🎨 **Modern UI** - Clean, responsive design that works on all devices
-- 🔒 **Secure** - Built with security best practices
+- 🔒 **Enterprise Security** - Rate limiting, CAPTCHA, input validation
+- 🛡️ **Abuse Protection** - Comprehensive anti-bot measures
 - 📱 **Mobile-friendly** - Optimized for mobile and desktop
 - 🛠️ **TypeScript** - Full type safety throughout the application
 - ⚡ **Lightning fast** - Optimized for performance
+- 🗄️ **Persistent Storage** - SQLite database with click tracking
+- 🧪 **Fully Tested** - Comprehensive test suite with 19 passing tests
+
+## 🌐 Live Demo
+
+**Try it now:** [https://cb-url-shortener.up.railway.app](https://cb-url-shortener.up.railway.app)
+
+- ✅ **Fully functional** - Shorten URLs instantly
+- ✅ **Production ready** - Deployed on Railway with HTTPS
+- ✅ **Security enabled** - Rate limiting and CAPTCHA protection
+- ✅ **Mobile responsive** - Works on all devices
 
 ## 🚀 Quick Start
 
@@ -28,16 +41,13 @@ A modern, fast, and simple URL shortener built with TypeScript, React, and Expre
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/cadebryant/url-shortener.git
    cd url-shortener
    ```
 
 2. **Install dependencies**
    ```bash
    npm install
-   cd client
-   npm install
-   cd ..
    ```
 
 3. **Build the project**
@@ -62,26 +72,34 @@ A modern, fast, and simple URL shortener built with TypeScript, React, and Expre
    npm run dev
    ```
 
-2. **In another terminal, start the React development server**
-   ```bash
-   npm run client
-   ```
+The server will run on `http://localhost:3000` with hot reloading.
 
-The backend will run on `http://localhost:3000` and the React dev server on `http://localhost:3001`.
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+```
 
 ### Project Structure
 
 ```
 url-shortener/
 ├── src/
-│   └── server.ts          # Express.js backend
-├── client/                # React frontend
-│   ├── src/
-│   │   ├── App.tsx       # Main React component
-│   │   └── App.css       # Styles
-│   └── public/
+│   └── server.ts          # Express.js backend with embedded frontend
+├── tests/                 # Comprehensive test suite
+│   ├── simple.test.ts    # Unit tests
+│   ├── functional.test.ts # Integration tests
+│   └── utils/            # Test utilities
 ├── package.json
 ├── tsconfig.json
+├── jest.config.js        # Test configuration
 ├── railway.json          # Railway deployment config
 └── README.md
 ```
@@ -137,6 +155,7 @@ The application uses the following environment variables:
 
 - `PORT` - Server port (default: 3000)
 - `NODE_ENV` - Environment (development/production)
+- `SHORT_DOMAIN` - Custom domain for shorter URLs (optional)
 
 ### Custom Domain (Optional)
 
@@ -162,12 +181,18 @@ Shorten a URL
 **Response:**
 ```json
 {
-  "shortUrl": "https://yourdomain.com/abc123",
+  "shortUrl": "https://cb-url-shortener.up.railway.app/abc123",
   "originalUrl": "https://example.com/very/long/url",
   "shortCode": "abc123",
   "clickCount": 0
 }
 ```
+
+**Security Features:**
+- Rate limiting: 100 requests per 15 minutes per IP
+- CAPTCHA validation required
+- Input sanitization and validation
+- Suspicious URL detection
 
 ### GET `/api/stats/:shortCode`
 Get statistics for a short URL
@@ -188,7 +213,7 @@ Redirect to original URL
 ## 🎨 Customization
 
 ### Styling
-Edit `client/src/App.css` to customize the appearance.
+Edit the embedded CSS in `src/server.ts` to customize the appearance.
 
 ### Backend Logic
 Modify `src/server.ts` to add features like:
@@ -197,16 +222,20 @@ Modify `src/server.ts` to add features like:
 - Expiration dates
 - Analytics
 
-### Database Integration
-Replace the in-memory storage with a database:
+### Security Settings
+Adjust rate limiting, CAPTCHA complexity, and validation rules in `src/server.ts`.
 
-```typescript
-// Example with MongoDB
-import { MongoClient } from 'mongodb';
+## 🧪 Testing
 
-const client = new MongoClient(process.env.MONGODB_URI);
-const db = client.db('urlshortener');
-const urls = db.collection('urls');
+The project includes comprehensive tests:
+
+- **Unit Tests** - Test utility functions and validation logic
+- **Integration Tests** - Test API endpoints with real database
+- **Security Tests** - Validate rate limiting and input sanitization
+
+Run tests with:
+```bash
+npm test
 ```
 
 ## 🤝 Contributing
@@ -224,8 +253,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Built with [Express.js](https://expressjs.com/)
-- Frontend powered by [React](https://reactjs.org/)
+- Database powered by [SQLite](https://www.sqlite.org/)
 - Deployed on [Railway](https://railway.app)
+- Testing with [Jest](https://jestjs.io/)
+- Security with [Helmet](https://helmetjs.github.io/)
 - Icons from [Emoji](https://emojipedia.org/)
 
 ## 📞 Support
